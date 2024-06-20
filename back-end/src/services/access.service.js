@@ -6,7 +6,10 @@ const crypto = require('node:crypto')
 const KeyTokenService = require("./keyToken.service")
 const { createTokenPair } = require("../auth/authUtils")
 const { getInfoData } = require("../utils")
-const { BadRequsetError } = require("../core/error.response")
+const { BadRequestError, AuthFailureError } = require("../core/error.response")
+
+// service ///
+const { findByEmail } = require("./shop.service")
 
 const RoleShop = {
     SHOP: 'SHOP',
@@ -17,6 +20,42 @@ const RoleShop = {
 
 class AccessService {
 
+    /*
+        1 - check email in dbs 
+        2 - match password
+        3 - creata AT vs RT and save
+        4 - generate tokens
+        5 - get data return login
+    */
+    static login = async ({ email, password, refreshToken = null }) => {
+
+        //1.
+        const foundShop = await findByEmail({ email })
+        if (!foundShop) throw new BadRequestError('Shop not registered!')
+
+        //2.
+        const match = bycrypt.compare(password, foundShop.password)
+        if (!match) throw new AuthFailureError('Authentication error')
+
+        //3.
+        //create privateKey, publicKey
+        const privateKey = crypto.randomBytes(64).toString('hex')
+        const publicKey = crypto.randomBytes(64).toString('hex')
+
+        //4. generate tokens
+        const { _id: userId } = foundShop
+        const tokens = await createTokenPair({ userId, email }, publicKey, privateKey)
+
+        await KeyTokenService.createKeyToken({
+            refreshToken: tokens.refreshToken,
+            privateKey, publicKey, userId
+        })
+        return {
+            shop: getInfoData({ fields: ['_id', 'name', 'email'], object: foundShop }),
+            tokens
+        }
+    }
+
     static signUp = async ({ name, email, password }) => {
 
         // try {
@@ -25,7 +64,7 @@ class AccessService {
         const holderShop = await shopModel.findOne({ email }).lean() // lean giup giam tai, tra ve 1 object java thuan thuy
 
         if (holderShop) {
-            throw new BadRequsetError('Error: Shop already registere!')
+            throw new BadRequestError('Error: Shop already registere!')
         }
         //step 2: Nếu email chưa tồn tại, nó sẽ mã hóa mật khẩu của shop sử dụng thư viện bcrypt.
         const passwordHash = await bycrypt.hash(password, 10) //10 giup do bao mat cao( co the hon)
@@ -37,7 +76,7 @@ class AccessService {
 
         //step 3: Tạo cặp khóa công khai và riêng tư để sử dụng trong quá trình xác thực bằng token.
         if (newShop) {
-
+            //create privateKey, publicKey
             const privateKey = crypto.randomBytes(64).toString('hex')
             const publicKey = crypto.randomBytes(64).toString('hex')
 
@@ -51,7 +90,7 @@ class AccessService {
             })
 
             if (!KeyStore) {
-                // throw new BadRequsetError('Error: KeyStore error')
+                // throw new BadRequestError('Error: KeyStore error')
                 return {
                     code: 'xxx',
                     message: 'KeyStore error'
@@ -67,7 +106,7 @@ class AccessService {
             return {
                 code: 201,
                 metadata: {
-                    shop: getInfoData({ fileds: ['_id', 'name', 'email'], object: newShop }),
+                    shop: getInfoData({ fields: ['_id', 'name', 'email'], object: newShop }),
                     tokens
                 }
             }
