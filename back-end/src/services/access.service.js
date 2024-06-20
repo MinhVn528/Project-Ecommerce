@@ -19,7 +19,6 @@ class AccessService {
     static signUp = async ({ name, email, password }) => {
         try {
             //step 1: check email exists??
-
             //Kiểm tra xem email của shop đã tồn tại trong cơ sở dữ liệu hay chưa. Nếu đã tồn tại, nó sẽ trả về thông báo lỗi.
             const holderShop = await shopModel.findOne({ email }).lean() // lean giup giam tai, tra ve 1 object java thuan thuy
 
